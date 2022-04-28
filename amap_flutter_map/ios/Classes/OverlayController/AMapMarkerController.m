@@ -119,7 +119,7 @@
   if (!marker) {
     return NO;
   }
-  // 对齐google的行为，如果点击事件不自定义处理时，在点击时移动地图
+  // 对齐google的行为，如果点击事件不自定义处理时，在点击时移动地图中心点为点击marker坐标点
   if (marker.infoWindowEnable) {
     [self.mapView setCenterCoordinate:marker.position animated: YES];
   }
