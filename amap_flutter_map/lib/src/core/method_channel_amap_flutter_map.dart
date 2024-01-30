@@ -78,6 +78,17 @@ class MethodChannelAMapFlutterMap implements AMapFlutterPlatform {
     );
   }
 
+  /// 更新circle的数据
+  Future<void> updateCircles(
+    CircleUpdates circleUpdates, {
+    required int mapId,
+  }) {
+    return channel(mapId).invokeMethod<void>(
+      'circles#update',
+      circleUpdates.toAMapJson(),
+    );
+  }
+
   @override
   void dispose({required int id}) {
     if (_channels.containsKey(id)) {
@@ -250,6 +261,27 @@ class MethodChannelAMapFlutterMap implements AMapFlutterPlatform {
     required int mapId,
   }) {
     return channel(mapId).invokeMethod<Uint8List>('map#takeSnapshot');
+  }
+
+  Future<ScreenCoordinate> getScreenCoordinate(
+    LatLng latLng, {
+    required int mapId,
+  }) async {
+    final result = (await channel(mapId).invokeMapMethod<String, int>(
+      'map#getScreenCoordinate',
+      latLng.toJson(),
+    ))!;
+    return ScreenCoordinate(x: result['x']!, y: result['y']!);
+  }
+
+  Future<LatLng> getLatLng(
+    ScreenCoordinate screenCoordinate, {
+    required int mapId,
+  }) async {
+    final List<dynamic> latLng = (await channel(mapId)
+        .invokeMethod<List<dynamic>>(
+            'map#getLatLng', screenCoordinate.toJson()))!;
+    return LatLng(latLng[0] as double, latLng[1] as double);
   }
 
   //获取地图审图号（普通地图）

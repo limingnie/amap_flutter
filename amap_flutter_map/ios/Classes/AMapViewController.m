@@ -21,6 +21,10 @@
 #import "MAPolygon+Flutter.h"
 #import "MAPolygonRenderer+Flutter.h"
 #import "AMapPolygon.h"
+#import "AMapCircleController.h"
+#import "MACircle+Flutter.h"
+#import "MACircleRenderer+Flutter.h"
+#import "AMapCircle.h"
 #import <AMapFoundationKit/AMapFoundationKit.h>
 #import "AMapLocation.h"
 #import "AMapJsonUtils.h"
@@ -37,6 +41,7 @@
 @property (nonatomic,strong) AMapMarkerController *markerController;
 @property (nonatomic,strong) AMapPolylineController *polylinesController;
 @property (nonatomic,strong) AMapPolygonController *polygonsController;
+@property (nonatomic,strong) AMapCircleController *circlesController;
 
 @property (nonatomic,copy) FlutterResult waitForMapCallBack;//waitForMap的回调，仅当地图没有加载完成时缓存使用
 @property (nonatomic,assign) BOOL mapInitCompleted;//地图初始化完成，首帧回调的标记
@@ -106,6 +111,9 @@
         _polygonsController = [[AMapPolygonController alloc] init:_channel
                                                           mapView:_mapView
                                                         registrar:registrar];
+        _circlesController = [[AMapCircleController alloc] init:_channel
+                                                          mapView:_mapView
+                                                        registrar:registrar];
         id markersToAdd = args[@"markersToAdd"];
         if ([markersToAdd isKindOfClass:[NSArray class]]) {
             [_markerController addMarkers:markersToAdd];
@@ -118,7 +126,11 @@
         if ([polygonsToAdd isKindOfClass:[NSArray class]]) {
             [_polygonsController addPolygons:polygonsToAdd];
         }
-        
+        id circlesToAdd = args[@"circlesToAdd"];
+        if ([circlesToAdd isKindOfClass:[NSArray class]]) {
+            [_circlesController addCircles:circlesToAdd];
+        }
+
         [self setMethodCallHandler];
     }
     return self;
@@ -216,6 +228,30 @@
                 NSLog(@"takeSnapsShot 载入不完整");
             }
         }];
+    }];
+    [self.channel addMethodName:@"map#getScreenCoordinate" withHandler:^(FlutterMethodCall * _Nonnull call, FlutterResult  _Nonnull result) {
+        CLLocationCoordinate2D latLng = [AMapConvertUtil coordinateFromArray:call.arguments];
+        CGPoint point = [weakSelf.mapView convertCoordinate:latLng
+                              toPointToView:weakSelf.mapView];
+        if (weakSelf.mapView.frame.size.width == 0.0) {
+            // 调用该方法时,
+            // 地图大小为0时, 计算的结果一定是错误的
+            // 地图大小不为0时, 计算的结果也可能是错误...
+            // 地图加载完成后立即调用, 有一定概率出现错误的结果...目前推荐延时一下后在调用该方法
+            // TODO: 2022/8/13 ipcjs 为什么会这样, 要如何避免?
+            NSLog(@"Warning: map size is zero, map#getScreenCoordinate, %@ -> %@, %@", NSStringFromCoordinate(latLng), NSStringFromCGPoint(point), weakSelf.mapView);
+        }
+        result([AMapConvertUtil jsonFromScreenCoordinate:point]);
+    }];
+    [self.channel addMethodName:@"map#getLatLng" withHandler:^(FlutterMethodCall * _Nonnull call, FlutterResult  _Nonnull result) {
+        CGPoint point = [AMapConvertUtil screenCoordinateFromJson:call.arguments];
+        CLLocationCoordinate2D latLng = [weakSelf.mapView convertPoint:point
+                                                  toCoordinateFromView:weakSelf.mapView];
+        if (weakSelf.mapView.frame.size.width == 0.0) {
+            // 同上
+            NSLog(@"Warning: map size is zero, map#getLatLng, %@ -> %@, %@", NSStringFromCGPoint(point), NSStringFromCoordinate(latLng), weakSelf.mapView);
+        }
+        result([AMapConvertUtil jsonFromCoordinate:latLng]);
     }];
     [self.channel addMethodName:@"map#setRenderFps" withHandler:^(FlutterMethodCall * _Nonnull call, FlutterResult  _Nonnull result) {
         NSInteger fps = [call.arguments[@"fps"] integerValue];
@@ -424,6 +460,15 @@
         MAPolygonRenderer *polygonRenderer = [[MAPolygonRenderer alloc] initWithPolygon:polygon];
         [polygonRenderer updateRenderWithPolygon:fPolygon];
         return polygonRenderer;
+    } else if ([overlay isKindOfClass:[MACircle class]]) {
+        MACircle *circle = overlay;
+        if (circle.circleId == nil) {
+            return nil;
+        }
+        AMapCircle *fCircle = [_circlesController circleForId:circle.circleId];
+        MACircleRenderer *circleRenderer = [[MACircleRenderer alloc] initWithCircle:circle];
+        [circleRenderer updateRenderWithCircle:fCircle];
+        return circleRenderer;
     } else {
         return nil;
     }
